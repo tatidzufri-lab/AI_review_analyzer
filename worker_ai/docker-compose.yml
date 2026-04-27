@@ -1,0 +1,12 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reviews-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: python worker.py
+    volumes:
+      - ./data:/service/data
