@@ -134,11 +134,15 @@ async def get_review(review_id: int) -> dict[str, Any]:
         return review.to_dict()
 
 
-@router.post("/reviews", status_code=201)
-async def create_review(request: Request) -> dict[str, Any]:
+@router.post("/reviews")
+async def create_review(request: Request) -> JSONResponse:
     """Принимает payload, совместимый с worker_ai.ReviewCreatePayload.
 
     Поля: parent_id (int|None), name (str|None), text (str, обязательно).
+
+    Идемпотентность: при наличии parent_id и уже существующего ответа на этот
+    родительский отзыв возвращается существующая запись со статусом 200,
+    а не создаётся новая. Это защищает от дубликатов при ретраях воркера.
     """
     payload = await _safe_json(request)
 
@@ -160,15 +164,28 @@ async def create_review(request: Request) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail="Field 'parent_id' must be int")
 
     with _SessionLocal() as session:
-        if parent_id is not None and session.get(Review, parent_id) is None:
-            raise HTTPException(status_code=404, detail="Parent review not found")
+        if parent_id is not None:
+            if session.get(Review, parent_id) is None:
+                raise HTTPException(status_code=404, detail="Parent review not found")
+
+            existing_reply = session.execute(
+                select(Review)
+                .where(Review.parent_id == parent_id)
+                .order_by(Review.id.asc())
+            ).scalars().first()
+            if existing_reply is not None:
+                logger.info(
+                    "Idempotent: returning existing reply id=%s for parent_id=%s",
+                    existing_reply.id, parent_id,
+                )
+                return JSONResponse(status_code=200, content=existing_reply.to_dict())
 
         review = Review(parent_id=parent_id, name=name, text=text, status="new")
         session.add(review)
         session.commit()
         session.refresh(review)
         logger.info("Review created id=%s parent_id=%s", review.id, review.parent_id)
-        return review.to_dict()
+        return JSONResponse(status_code=201, content=review.to_dict())
 
 
 @router.patch("/reviews/{review_id}")

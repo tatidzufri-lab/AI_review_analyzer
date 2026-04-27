@@ -3,7 +3,7 @@ import logging
 
 from client import ReviewSiteClient
 from config import get_settings
-from models import ReviewCreatePayload, ReviewStatus, ReviewTone, ReviewUpdatePayload
+from models import RemoteReview, ReviewCreatePayload, ReviewStatus, ReviewTone, ReviewUpdatePayload
 from processor import analyze_review
 from state import get_worker_state
 from telegram_bot import send_new_review_notification
@@ -37,62 +37,80 @@ async def wait_for_site() -> None:
             await asyncio.sleep(3)
 
 
-async def process_new_reviews() -> int:
-    reviews = await client.fetch_new_reviews()
+async def _process_one(review: RemoteReview) -> None:
+    logger.info("Processing review id=%s", review.id)
 
-    for review in reviews:
-        logger.info("Processing review id=%s", review.id)
-
-        if is_ai_authored(review.name):
-            logger.info("Review id=%s was created by AI, marking as processed without reply", review.id)
-            await client.update_review(
-                review.id,
-                ReviewUpdatePayload(
-                    status=ReviewStatus.PROCESSED,
-                    tone=ReviewTone.NEUTRAL,
-                ),
-            )
-            state.mark_processed(review.id)
-            continue
-
-        tone, response_text = await analyze_review(review.text)
-        review.tone = tone.value
-
-        if not state.is_notified(review.id):
-            notification_sent = await send_new_review_notification(review)
-            if notification_sent:
-                state.mark_notified(review.id)
-
-        if state.is_processed(review.id):
-            logger.info("Review id=%s already processed in local state, skipping duplicate", review.id)
-            continue
-
-        ai_reply = await client.create_review(
-            ReviewCreatePayload(
-                parent_id=review.id,
-                name=settings.ai_author_name,
-                text=response_text,
-            ),
-        )
+    if is_ai_authored(review.name):
+        logger.info("Review id=%s was created by AI, marking as processed without reply", review.id)
         await client.update_review(
             review.id,
-            ReviewUpdatePayload(
-                status=ReviewStatus.PROCESSED,
-                tone=tone,
-            ),
-        )
-        await client.update_review(
-            ai_reply.id,
             ReviewUpdatePayload(
                 status=ReviewStatus.PROCESSED,
                 tone=ReviewTone.NEUTRAL,
             ),
         )
-        state.mark_processed(ai_reply.id)
         state.mark_processed(review.id)
-        logger.info("Review id=%s processed", review.id)
+        return
 
-    return len(reviews)
+    tone, response_text = await analyze_review(review.text)
+    review.tone = tone.value
+
+    # Telegram-уведомление: ошибка не должна ронять обработку отзыва.
+    if not state.is_notified(review.id):
+        try:
+            notification_sent = await send_new_review_notification(review)
+            if notification_sent:
+                state.mark_notified(review.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Telegram notification failed for review id=%s: %s", review.id, exc)
+
+    if state.is_processed(review.id):
+        logger.info("Review id=%s already processed in local state, skipping duplicate", review.id)
+        return
+
+    # POST идемпотентен на стороне API: при ретрае получим существующий ответ.
+    ai_reply = await client.create_review(
+        ReviewCreatePayload(
+            parent_id=review.id,
+            name=settings.ai_author_name,
+            text=response_text,
+        ),
+    )
+    await client.update_review(
+        review.id,
+        ReviewUpdatePayload(
+            status=ReviewStatus.PROCESSED,
+            tone=tone,
+        ),
+    )
+    await client.update_review(
+        ai_reply.id,
+        ReviewUpdatePayload(
+            status=ReviewStatus.PROCESSED,
+            tone=ReviewTone.NEUTRAL,
+        ),
+    )
+    state.mark_processed(ai_reply.id)
+    state.mark_processed(review.id)
+    logger.info("Review id=%s processed", review.id)
+
+
+async def process_new_reviews() -> int:
+    try:
+        reviews = await client.fetch_new_reviews()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to fetch new reviews: %s", exc)
+        return 0
+
+    processed = 0
+    for review in reviews:
+        try:
+            await _process_one(review)
+            processed += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Failed to process review id=%s: %s", review.id, exc)
+
+    return processed
 
 
 async def main() -> None:
