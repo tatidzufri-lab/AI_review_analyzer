@@ -13,6 +13,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
+# httpx на уровне INFO печатает полный URL каждого запроса, а у Telegram
+# токен бота входит в сам адрес — так он утекал бы в логи контейнера.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("worker")
 settings = get_settings()
 state = get_worker_state()

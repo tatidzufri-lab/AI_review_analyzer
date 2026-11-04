@@ -16,8 +16,13 @@ const WIDGET_CONFIG = {
   /**
    * URL эндпоинта, который возвращает { client_secret } (см. retreat-case/server).
    * Должен совпадать с origin статики в CORS_ORIGINS на сервере.
+   * Локально — отдельный сервер на 8000; на сайте — тот же домен, nginx сам
+   * передаёт /api/create-session бэкенду. Иначе с прода виджет стучался бы
+   * в 127.0.0.1 на компьютере посетителя.
    */
-  sessionEndpoint: "http://127.0.0.1:8000/api/create-session",
+  sessionEndpoint: /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+    ? "http://127.0.0.1:8000/api/create-session"
+    : "/api/create-session",
   /** Имя ассистента в терракотовой полосе над чатом */
   assistantName: "Консультант ретрита",
   /** Локаль UI iframe ChatKit (приветствие, плейсхолдер, кнопки). */

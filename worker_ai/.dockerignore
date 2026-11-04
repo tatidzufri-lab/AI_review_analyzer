@@ -1,0 +1,14 @@
+# Dockerfile копирует каталог целиком (COPY . .), поэтому без этого списка
+# в образ попали бы .env с ключом OpenAI и токеном бота, а также локальное
+# виртуальное окружение и состояние воркера.
+.env
+.venv/
+venv/
+data/
+__pycache__/
+*.pyc
+.DS_Store
+README.md
+docker-compose.yml
+Dockerfile
+.dockerignore
