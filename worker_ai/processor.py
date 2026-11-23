@@ -11,6 +11,13 @@ from models import ReviewTone
 logger = logging.getLogger("worker.processor")
 settings = get_settings()
 
+_CYRILLIC = re.compile(r"[А-Яа-яЁё]")
+
+
+def detect_lang(review_text: str) -> str:
+    """Отвечаем на языке отзыва: кириллица — русский, иначе английский."""
+    return "ru" if _CYRILLIC.search(review_text or "") else "en"
+
 
 # --- Fallback-классификатор: используется только если нет OPENAI_API_KEY ---
 # Намеренно консервативный: без многозначных слов вроде "долго" или "проблем",
@@ -39,8 +46,26 @@ def detect_tone_keywords(review_text: str) -> ReviewTone:
     return ReviewTone.NEUTRAL
 
 
+_FALLBACK_EN = {
+    ReviewTone.NEGATIVE: (
+        "We're sorry you were left with a negative experience. Thank you for telling us. "
+        "Please contact our support team, and we'll do our best to help as soon as possible."
+    ),
+    ReviewTone.POSITIVE: (
+        "Thank you for your review and your kind words. We're really glad "
+        "you have warm memories of the retreat."
+    ),
+    ReviewTone.NEUTRAL: (
+        "Thank you for your review. We've read it carefully and will take your comments into account. "
+        "If you'd like, share more details so we can respond more precisely."
+    ),
+}
+
+
 def build_fallback_response(review_text: str) -> str:
     tone = detect_tone_keywords(review_text)
+    if detect_lang(review_text) == "en":
+        return _FALLBACK_EN[tone]
 
     if tone == ReviewTone.NEGATIVE:
         return (
@@ -89,13 +114,28 @@ _SYSTEM_PROMPT = (
     "(текст оборван, неясно, кто кого не пригласил, — без явной претензии трактуй как neutral).\n"
     "  Отзыв: «Долго сомневалась, ехать или нет, но это была лучшая инвестиция в себя» → tone=positive.\n\n"
     "Правила ответа:\n"
-    "  - Пиши на русском языке.\n"
+    "  - {language_rule}\n"
     "  - Если тон позитивный — поблагодари искренне, без шаблонов.\n"
     "  - Если негативный — мягко извинись и предложи разобраться.\n"
     "  - Если нейтральный — отреагируй по существу, без навязчивых уточнений.\n"
     "  - Без markdown, канцелярита, подписей и дословного повторения отзыва.\n"
-    "  - Никогда не отвечай на английском или другом языке."
+    "  - {language_ban}"
 )
+
+# Промпт общий; меняется только язык ответа. Название ретрита для англоязычных — Know Yourself.
+_LANGUAGE_RULES = {
+    "ru": ("Пиши на русском языке.", "Никогда не отвечай на английском или другом языке."),
+    "en": (
+        "Пиши ответ на английском языке: простыми короткими фразами, понятными и не носителю. "
+        "Ретрит называй Know Yourself.",
+        "Никогда не отвечай на русском или другом языке, только на английском.",
+    ),
+}
+
+
+def system_prompt(lang: str) -> str:
+    rule, ban = _LANGUAGE_RULES.get(lang, _LANGUAGE_RULES["ru"])
+    return _SYSTEM_PROMPT.replace("{language_rule}", rule).replace("{language_ban}", ban)
 
 
 def _parse_analysis(raw: str) -> tuple[ReviewTone | None, str | None]:
@@ -131,12 +171,13 @@ async def analyze_review(review_text: str) -> tuple[ReviewTone, str]:
         return detect_tone_keywords(review_text), build_fallback_response(review_text)
 
     client = AsyncOpenAI(api_key=settings.openai_api_key)
+    lang = detect_lang(review_text)
     prompt = f"Отзыв: {review_text}"
 
     try:
         response = await client.responses.create(
             model=settings.openai_model,
-            instructions=_SYSTEM_PROMPT,
+            instructions=system_prompt(lang),
             input=prompt,
         )
         raw = (response.output_text or "").strip()

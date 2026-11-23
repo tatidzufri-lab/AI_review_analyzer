@@ -8,11 +8,39 @@
  * Обновления (status / tone / response) приходят от воркера через PATCH с
  * заголовком X-Worker-Token; сюда отдаются уже готовые поля.
  */
+/** Язык страницы: <html lang="en"> на /en/. Отзывы показываются только своего языка. */
+const REVIEWS_LANG = (document.documentElement.lang || "ru").slice(0, 2) === "en" ? "en" : "ru";
+
+const REVIEWS_TEXT = {
+  ru: {
+    aiAuthor: "AI-ассистент ретрита", locale: "ru-RU", anonymous: "Аноним",
+    tonePositive: "тёплый", toneNegative: "требует внимания", toneNeutral: "нейтральный", toneNew: "новый",
+    processed: "обработан", queued: "в очереди",
+    empty: "Будьте первой, кто поделится впечатлением.",
+    loadFailed: "Не удалось загрузить отзывы", error: "ошибка",
+    emptyText: "Напишите, пожалуйста, текст отзыва.", sending: "Отправляем…",
+    saveFailed: "Не удалось сохранить отзыв",
+    sent: "Спасибо! Отзыв отправлен. AI-ассистент ответит в ближайшее время.",
+    sendFailed: "Ошибка отправки",
+  },
+  en: {
+    aiAuthor: "Retreat AI assistant", locale: "en-GB", anonymous: "Anonymous",
+    tonePositive: "warm", toneNegative: "needs attention", toneNeutral: "neutral", toneNew: "new",
+    processed: "processed", queued: "in queue",
+    empty: "Be the first to share your impressions.",
+    loadFailed: "Couldn't load the reviews", error: "error",
+    emptyText: "Please write the text of your review.", sending: "Sending…",
+    saveFailed: "Couldn't save the review",
+    sent: "Thank you! Your review has been sent. The AI assistant will reply shortly.",
+    sendFailed: "Sending failed",
+  },
+}[REVIEWS_LANG];
+
 const REVIEWS_CONFIG = {
   /** Базовый URL FastAPI-бэкенда. На проде — origin продакшна. */
   apiBase: "",
   /** Имя AI-ассистента в подписи к ответу. */
-  aiAuthor: "AI-ассистент ретрита",
+  aiAuthor: REVIEWS_TEXT.aiAuthor,
   /** Сколько миллисекунд держать сообщение об отправке. */
   feedbackTimeoutMs: 6000,
 };
@@ -62,7 +90,7 @@ const REVIEWS_CONFIG = {
       if (!iso) return "";
       try {
         var d = new Date(iso);
-        return d.toLocaleString("ru-RU", {
+        return d.toLocaleString(REVIEWS_TEXT.locale, {
           day: "2-digit",
           month: "long",
           year: "numeric",
@@ -73,10 +101,10 @@ const REVIEWS_CONFIG = {
     }
 
     function toneLabel(tone) {
-      if (tone === "positive") return "тёплый";
-      if (tone === "negative") return "требует внимания";
-      if (tone === "neutral") return "нейтральный";
-      return "новый";
+      if (tone === "positive") return REVIEWS_TEXT.tonePositive;
+      if (tone === "negative") return REVIEWS_TEXT.toneNegative;
+      if (tone === "neutral") return REVIEWS_TEXT.toneNeutral;
+      return REVIEWS_TEXT.toneNew;
     }
 
     function buildCard(review, replies) {
@@ -88,7 +116,7 @@ const REVIEWS_CONFIG = {
 
       var author = document.createElement("span");
       author.className = "review-card__author";
-      author.textContent = review.name || "Аноним";
+      author.textContent = review.name || REVIEWS_TEXT.anonymous;
       header.appendChild(author);
 
       var date = document.createElement("span");
@@ -104,7 +132,7 @@ const REVIEWS_CONFIG = {
 
       var status = document.createElement("span");
       status.className = "review-card__status";
-      status.textContent = review.status === "processed" ? "обработан" : "в очереди";
+      status.textContent = review.status === "processed" ? REVIEWS_TEXT.processed : REVIEWS_TEXT.queued;
       header.appendChild(status);
 
       card.appendChild(header);
@@ -154,7 +182,7 @@ const REVIEWS_CONFIG = {
       if (roots.length === 0) {
         var empty = document.createElement("p");
         empty.className = "reviews-list__empty";
-        empty.textContent = "Будьте первой, кто поделится впечатлением.";
+        empty.textContent = REVIEWS_TEXT.empty;
         listEl.appendChild(empty);
         return;
       }
@@ -186,7 +214,7 @@ const REVIEWS_CONFIG = {
     }
 
     function loadReviews() {
-      return fetch(REVIEWS_CONFIG.apiBase + "/api/reviews", {
+      return fetch(REVIEWS_CONFIG.apiBase + "/api/reviews?lang=" + REVIEWS_LANG, {
         headers: { Accept: "application/json" },
       })
         .then(function (res) {
@@ -203,7 +231,7 @@ const REVIEWS_CONFIG = {
           var p = document.createElement("p");
           p.className = "reviews-list__placeholder";
           p.textContent =
-            "Не удалось загрузить отзывы (" + (err.message || "ошибка") + ").";
+            REVIEWS_TEXT.loadFailed + " (" + (err.message || REVIEWS_TEXT.error) + ").";
           listEl.appendChild(p);
         });
     }
@@ -215,16 +243,16 @@ const REVIEWS_CONFIG = {
         var textInput = $("#review-text", formEl);
         var text = (textInput && textInput.value || "").trim();
         if (!text) {
-          setFeedback("Напишите, пожалуйста, текст отзыва.", "error");
+          setFeedback(REVIEWS_TEXT.emptyText, "error");
           return;
         }
-        var payload = { text: text };
+        var payload = { text: text, lang: REVIEWS_LANG };
         var name = (nameInput && nameInput.value || "").trim();
         if (name) payload.name = name;
 
         var submitBtn = formEl.querySelector('button[type="submit"]');
         if (submitBtn) submitBtn.disabled = true;
-        setFeedback("Отправляем…");
+        setFeedback(REVIEWS_TEXT.sending);
 
         fetch(REVIEWS_CONFIG.apiBase + "/api/reviews", {
           method: "POST",
@@ -239,7 +267,7 @@ const REVIEWS_CONFIG = {
               if (!res.ok) {
                 throw new Error(
                   (body && body.detail) ||
-                    "Не удалось сохранить отзыв (" + res.status + ")"
+                    REVIEWS_TEXT.saveFailed + " (" + res.status + ")"
                 );
               }
               return body;
@@ -248,13 +276,13 @@ const REVIEWS_CONFIG = {
           .then(function () {
             formEl.reset();
             setFeedback(
-              "Спасибо! Отзыв отправлен. AI-ассистент ответит в ближайшее время.",
+              REVIEWS_TEXT.sent,
               "success"
             );
             loadReviews();
           })
           .catch(function (err) {
-            setFeedback(err.message || "Ошибка отправки", "error");
+            setFeedback(err.message || REVIEWS_TEXT.sendFailed, "error");
           })
           .finally(function () {
             if (submitBtn) submitBtn.disabled = false;

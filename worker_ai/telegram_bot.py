@@ -4,6 +4,7 @@ import httpx
 
 from config import get_settings
 from models import RemoteReview, ReviewTone
+from processor import detect_lang
 
 
 logger = logging.getLogger("worker.telegram")
@@ -14,6 +15,11 @@ TONE_LABELS = {
     ReviewTone.NEGATIVE.value: "отрицательный",
     ReviewTone.NEUTRAL.value: "нейтральный",
 }
+TONE_LABELS_EN = {
+    ReviewTone.POSITIVE.value: "positive",
+    ReviewTone.NEGATIVE.value: "negative",
+    ReviewTone.NEUTRAL.value: "neutral",
+}
 
 
 def get_target_chat_id() -> str:
@@ -21,6 +27,16 @@ def get_target_chat_id() -> str:
 
 
 def build_review_message(review: RemoteReview) -> str:
+    if detect_lang(review.text) == "en":
+        # Тот же канал куратора, карточка на языке отзыва
+        return (
+            "New review · EN\n"
+            f"ID: {review.id}\n"
+            f"Name: {review.name or 'Anonymous'}\n"
+            f"Tone: {TONE_LABELS_EN.get(review.tone, 'unknown')}\n"
+            f"Date: {review.created_at}\n"
+            f"Text:\n{review.text}"
+        )
     tone_label = TONE_LABELS.get(review.tone, "не определен")
     author = review.name or "Аноним"
     return (

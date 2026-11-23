@@ -7,6 +7,34 @@
  * Локально: поднимите server/main.py, задайте CHATKIT_WORKFLOW_ID в server/.env и sessionEndpoint ниже.
  */
 
+/** Язык страницы: <html lang="en"> на /en/, иначе русский. */
+const WIDGET_LANG = (document.documentElement.lang || "ru").slice(0, 2) === "en" ? "en" : "ru";
+
+const WIDGET_TEXT = {
+  ru: {
+    assistantName: "Консультант ретрита",
+    open: "Открыть чат",
+    close: "Закрыть чат",
+    loadFailed: "Не удалось загрузить ChatKit",
+    chatkitError: "Ошибка ChatKit. Проверьте бэкенд и workflow.",
+    sessionFailed: "Сессия ChatKit не создана",
+    noSecret: "Ответ без client_secret",
+    noSession: "Не удалось получить сессию",
+    initFailed: "Не удалось инициализировать чат",
+  },
+  en: {
+    assistantName: "Retreat assistant",
+    open: "Open chat",
+    close: "Close chat",
+    loadFailed: "Couldn't load ChatKit",
+    chatkitError: "ChatKit error. Please try again later.",
+    sessionFailed: "Couldn't start a chat session",
+    noSecret: "Response without client_secret",
+    noSession: "Couldn't get a chat session",
+    initFailed: "Couldn't start the chat",
+  },
+}[WIDGET_LANG];
+
 const WIDGET_CONFIG = {
   /**
    * ID workflow из Agent Builder (wf_…). Если null или "" — сервер берёт CHATKIT_WORKFLOW_ID из server/.env.
@@ -24,9 +52,9 @@ const WIDGET_CONFIG = {
     ? "http://127.0.0.1:8000/api/create-session"
     : "/api/create-session",
   /** Имя ассистента в терракотовой полосе над чатом */
-  assistantName: "Консультант ретрита",
+  assistantName: WIDGET_TEXT.assistantName,
   /** Локаль UI iframe ChatKit (приветствие, плейсхолдер, кнопки). */
-  locale: "ru",
+  locale: WIDGET_LANG,
 };
 
 (function () {
@@ -86,7 +114,7 @@ const WIDGET_CONFIG = {
         resolve();
       };
       script.onerror = function () {
-        reject(new Error("Не удалось загрузить ChatKit"));
+        reject(new Error(WIDGET_TEXT.loadFailed));
       };
       document.head.appendChild(script);
     });
@@ -113,9 +141,11 @@ const WIDGET_CONFIG = {
   }
 
   function createSessionRequestBody() {
+    // lang=en: сервер возьмет английский workflow (CHATKIT_WORKFLOW_ID_EN), если он задан
+    var body = { lang: WIDGET_LANG };
     var wid = resolvedWorkflowId();
-    if (!wid) return {};
-    return { workflow: { id: wid } };
+    if (wid) body.workflow = { id: wid };
+    return body;
   }
 
   function buildWidget() {
@@ -124,7 +154,7 @@ const WIDGET_CONFIG = {
     var root = el("div", "retreat-widget-root");
     var toggle = el("button", "retreat-widget-toggle", "💬");
     toggle.type = "button";
-    toggle.setAttribute("aria-label", "Открыть чат");
+    toggle.setAttribute("aria-label", WIDGET_TEXT.open);
 
     var panel = el("div", "retreat-widget-panel");
     panel.setAttribute("role", "dialog");
@@ -135,7 +165,7 @@ const WIDGET_CONFIG = {
     var title = el("h3", "retreat-widget-title", WIDGET_CONFIG.assistantName);
     var closeBtn = el("button", "retreat-widget-close", "✕");
     closeBtn.type = "button";
-    closeBtn.setAttribute("aria-label", "Закрыть чат");
+    closeBtn.setAttribute("aria-label", WIDGET_TEXT.close);
     header.appendChild(title);
     header.appendChild(closeBtn);
 
@@ -168,7 +198,7 @@ const WIDGET_CONFIG = {
       panel.classList.toggle("is-open", open);
       toggle.setAttribute(
         "aria-label",
-        open ? "Закрыть чат" : "Открыть чат"
+        open ? WIDGET_TEXT.close : WIDGET_TEXT.open
       );
       if (open) mountChatKitIfNeeded();
     }
@@ -195,7 +225,7 @@ const WIDGET_CONFIG = {
             setStatus(
               err && err.message
                 ? err.message
-                : "Ошибка ChatKit. Проверьте бэкенд и workflow."
+                : WIDGET_TEXT.chatkitError
             );
           });
 
@@ -249,13 +279,13 @@ const WIDGET_CONFIG = {
                       if (!res.ok) {
                         throw new Error(
                           (body && body.error) ||
-                            "Сессия ChatKit не создана (" +
+                            WIDGET_TEXT.sessionFailed + " (" +
                               res.status +
                               ")"
                         );
                       }
                       if (!body.client_secret) {
-                        throw new Error("Ответ без client_secret");
+                        throw new Error(WIDGET_TEXT.noSecret);
                       }
                       setStatus("");
                       return body.client_secret;
@@ -265,7 +295,7 @@ const WIDGET_CONFIG = {
                     setStatus(
                       err && err.message
                         ? err.message
-                        : "Не удалось получить сессию"
+                        : WIDGET_TEXT.noSession
                     );
                     throw err;
                   });
@@ -282,7 +312,7 @@ const WIDGET_CONFIG = {
           chatkitMounted = false;
           while (chatHost.firstChild) chatHost.removeChild(chatHost.firstChild);
           setStatus(
-            err && err.message ? err.message : "Не удалось инициализировать чат"
+            err && err.message ? err.message : WIDGET_TEXT.initFailed
           );
         });
     }

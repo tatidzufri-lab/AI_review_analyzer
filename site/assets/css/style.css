@@ -888,3 +888,12 @@ ul {
     font-size: 1.25rem;
   }
 }
+
+/* Переключатель языка в шапке (RU / EN) */
+.site-nav__lang {
+  padding: 0.15rem 0.55rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}

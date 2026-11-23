@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import (
     Column,
@@ -24,7 +25,9 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    inspect,
     select,
+    text as sql_text,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -34,6 +37,13 @@ logger = logging.getLogger("retreat.reviews")
 
 REVIEW_STATUSES = ("new", "processed")
 REVIEW_TONES = ("positive", "negative", "neutral")
+REVIEW_LANGS = ("ru", "en")
+_CYRILLIC = re.compile(r"[А-Яа-яЁё]")
+
+
+def detect_lang(text: str) -> str:
+    """Язык отзыва по тексту: кириллица — русский, иначе английский."""
+    return "ru" if _CYRILLIC.search(text or "") else "en"
 
 
 SERVER_DIR = Path(__file__).resolve().parent
@@ -59,6 +69,8 @@ class Review(_Base):
     status = Column(String(20), nullable=False, default="new", index=True)
     response = Column(Text, nullable=True)
     tone = Column(String(20), nullable=True)
+    # Язык страницы, на которой оставлен отзыв: ru (/) или en (/en/).
+    lang = Column(String(5), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     def to_dict(self) -> dict[str, Any]:
@@ -70,6 +82,7 @@ class Review(_Base):
             "status": self.status,
             "response": self.response,
             "tone": self.tone,
+            "lang": self.lang or detect_lang(self.text),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -88,6 +101,28 @@ _SessionLocal = sessionmaker(bind=_engine, autoflush=False, autocommit=False, ex
 
 def init_db() -> None:
     _Base.metadata.create_all(bind=_engine)
+    _migrate_lang_column()
+
+
+def _migrate_lang_column() -> None:
+    """База на сервере создана до появления колонки lang: добавляем и заполняем по тексту."""
+    columns = {c["name"] for c in inspect(_engine).get_columns("reviews")}
+    if "lang" in columns:
+        return
+    with _engine.begin() as conn:
+        conn.execute(sql_text("ALTER TABLE reviews ADD COLUMN lang VARCHAR(5)"))
+    with _SessionLocal() as session:
+        rows = session.execute(select(Review)).scalars().all()
+        parents = {r.id: r for r in rows}
+        for r in rows:
+            if r.parent_id is None:
+                r.lang = detect_lang(r.text)
+        for r in rows:
+            if r.parent_id is not None:
+                parent = parents.get(r.parent_id)
+                r.lang = parent.lang if parent is not None and parent.lang else detect_lang(r.text)
+        session.commit()
+        logger.info("Added lang column to %s reviews", len(rows))
 
 
 def seed_demo_reviews() -> int:
@@ -100,15 +135,33 @@ def seed_demo_reviews() -> int:
         ("Ольга", "Программа очень насыщенная, иногда хотелось больше свободного времени. "
                   "Но в целом впечатления тёплые."),
     ]
+    demo_en = [
+        ("Emily", "I came home a different person. The silence, the mountains and Anna's gentle "
+                  "guidance were exactly what I needed. Thank you!"),
+        ("Sophie", "I hesitated for a long time about going. In the end it was the best investment "
+                   "in myself in years. A small group, and everything was to the point."),
+        ("Laura", "The program is very full, and sometimes I wanted more free time. "
+                  "But overall my impressions are warm."),
+    ]
+    added = 0
     with _SessionLocal() as session:
         existing = session.execute(select(Review).limit(1)).scalar_one_or_none()
-        if existing is not None:
-            return 0
-        for name, text in demo:
-            session.add(Review(name=name, text=text, status="new"))
+        if existing is None:
+            for name, text in demo:
+                session.add(Review(name=name, text=text, status="new", lang="ru"))
+            added += len(demo)
+        # Английская страница появилась позже: свои стартовые отзывы, если их еще нет.
+        has_en = session.execute(
+            select(Review).where(Review.lang == "en", Review.parent_id.is_(None)).limit(1)
+        ).scalar_one_or_none()
+        if has_en is None:
+            for name, text in demo_en:
+                session.add(Review(name=name, text=text, status="new", lang="en"))
+            added += len(demo_en)
         session.commit()
-        logger.info("Seeded %s demo reviews", len(demo))
-        return len(demo)
+    if added:
+        logger.info("Seeded %s demo reviews", added)
+    return added
 
 
 def _worker_token() -> str:
@@ -119,10 +172,15 @@ router = APIRouter(prefix="/api", tags=["reviews"])
 
 
 @router.get("/reviews")
-async def list_reviews() -> list[dict[str, Any]]:
+async def list_reviews(lang: str | None = Query(default=None)) -> list[dict[str, Any]]:
+    """Без lang — все отзывы (так их читает воркер). С lang — только этого языка и ответы на них."""
     with _SessionLocal() as session:
         rows = session.execute(select(Review).order_by(Review.created_at.asc())).scalars().all()
-        return [r.to_dict() for r in rows]
+        items = [r.to_dict() for r in rows]
+    if lang not in REVIEW_LANGS:
+        return items
+    roots = {r["id"] for r in items if r["parent_id"] is None and r["lang"] == lang}
+    return [r for r in items if r["id"] in roots or r["parent_id"] in roots]
 
 
 @router.get("/reviews/{review_id}")
@@ -163,10 +221,13 @@ async def create_review(request: Request) -> JSONResponse:
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="Field 'parent_id' must be int")
 
+    lang = payload.get("lang")
     with _SessionLocal() as session:
         if parent_id is not None:
-            if session.get(Review, parent_id) is None:
+            parent = session.get(Review, parent_id)
+            if parent is None:
                 raise HTTPException(status_code=404, detail="Parent review not found")
+            lang = parent.lang  # ответ живет на той же странице, что и отзыв
 
             existing_reply = session.execute(
                 select(Review)
@@ -180,7 +241,9 @@ async def create_review(request: Request) -> JSONResponse:
                 )
                 return JSONResponse(status_code=200, content=existing_reply.to_dict())
 
-        review = Review(parent_id=parent_id, name=name, text=text, status="new")
+        if lang not in REVIEW_LANGS:
+            lang = detect_lang(text)
+        review = Review(parent_id=parent_id, name=name, text=text, status="new", lang=lang)
         session.add(review)
         session.commit()
         session.refresh(review)
