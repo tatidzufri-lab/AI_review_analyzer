@@ -91,7 +91,7 @@ const WIDGET_CONFIG = {
     ? "http://127.0.0.1:8000/api/chatkit"
     : "/api/chatkit",
   /** Ключ домена для ChatKit со своим сервером. */
-  domainKey: "local-dev",
+  domainKey: "domain_pk_69c0d2c8dc7081978bb67f7dad64ec5405994c0f8e604011",
   /** Имя ассистента в терракотовой полосе над чатом */
   assistantName: WIDGET_TEXT.assistantName,
   /** Локаль UI iframe ChatKit (приветствие, плейсхолдер, кнопки). */
