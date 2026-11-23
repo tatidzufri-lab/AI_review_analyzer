@@ -39,13 +39,13 @@ const WIDGET_TEXT = {
  * Режим бэкенда.
  * "self"   — свой сервер ChatKit (POST /api/chatkit, агенты на Agents SDK, RU и EN).
  * "hosted" — прежний workflow Agent Builder (отключается 30.11.2026).
- * Переключатель для проверки на живом сайте: ?chat=new или ?chat=old.
+ * По умолчанию с 24.11.2026 — свой сервер. ?chat=old — прежний режим до 30.11.2026.
  */
 const WIDGET_BACKEND = (function () {
   var q = new URLSearchParams(location.search).get("chat");
   if (q === "new") return "self";
-  if (q === "old") return "hosted";
-  return "hosted";
+  if (q === "old") return "hosted";  // запасной путь до отключения Agent Builder 30.11.2026
+  return "self";
 })();
 
 /** Стартовый экран на языке страницы (для своего сервера). */
