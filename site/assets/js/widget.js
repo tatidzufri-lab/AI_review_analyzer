@@ -35,6 +35,41 @@ const WIDGET_TEXT = {
   },
 }[WIDGET_LANG];
 
+/**
+ * Режим бэкенда.
+ * "self"   — свой сервер ChatKit (POST /api/chatkit, агенты на Agents SDK, RU и EN).
+ * "hosted" — прежний workflow Agent Builder (отключается 30.11.2026).
+ * Переключатель для проверки на живом сайте: ?chat=new или ?chat=old.
+ */
+const WIDGET_BACKEND = (function () {
+  var q = new URLSearchParams(location.search).get("chat");
+  if (q === "new") return "self";
+  if (q === "old") return "hosted";
+  return "hosted";
+})();
+
+/** Стартовый экран на языке страницы (для своего сервера). */
+const WIDGET_START = {
+  ru: {
+    greeting: "Здравствуйте! Я ассистент ретрита «Познай себя». С чем вам помочь?",
+    prompts: [
+      { label: "Где проходит ретрит?", prompt: "Где проходит ретрит и как добраться?" },
+      { label: "Что взять с собой", prompt: "Что взять с собой на ретрит?" },
+      { label: "Условия возврата", prompt: "Какие условия возврата, если я отменю поездку?" },
+      { label: "Подойдет ли мне?", prompt: "Подойдет ли мне ретрит, если я интроверт?" },
+    ],
+  },
+  en: {
+    greeting: "Hi! I'm the assistant of the Know Yourself retreat. How can I help?",
+    prompts: [
+      { label: "Where is the retreat?", prompt: "Where is the retreat and how do I get there?" },
+      { label: "What to pack", prompt: "What should I pack for the retreat?" },
+      { label: "Refund policy", prompt: "What is the refund policy if I cancel?" },
+      { label: "Is it right for me?", prompt: "Is the retreat right for me if I'm an introvert?" },
+    ],
+  },
+}[WIDGET_LANG];
+
 const WIDGET_CONFIG = {
   /**
    * ID workflow из Agent Builder (wf_…). Если null или "" — сервер берёт CHATKIT_WORKFLOW_ID из server/.env.
@@ -51,6 +86,12 @@ const WIDGET_CONFIG = {
   sessionEndpoint: /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
     ? "http://127.0.0.1:8000/api/create-session"
     : "/api/create-session",
+  /** Свой сервер ChatKit. */
+  chatkitEndpoint: /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+    ? "http://127.0.0.1:8000/api/chatkit"
+    : "/api/chatkit",
+  /** Ключ домена для ChatKit со своим сервером. */
+  domainKey: "local-dev",
   /** Имя ассистента в терракотовой полосе над чатом */
   assistantName: WIDGET_TEXT.assistantName,
   /** Локаль UI iframe ChatKit (приветствие, плейсхолдер, кнопки). */
@@ -127,6 +168,7 @@ const WIDGET_CONFIG = {
   }
 
   function validateConfig() {
+    if (WIDGET_BACKEND === "self") return null;
     var wid = resolvedWorkflowId();
     if (wid && !/^wf_/.test(wid)) {
       return "Неверный workflowId: ожидается id вида wf_… или оставьте null — тогда используется CHATKIT_WORKFLOW_ID в server/.env.";
@@ -235,6 +277,7 @@ const WIDGET_CONFIG = {
             console.log("[ChatKit] thread.change →", _debugThreadId);
           });
           chatkit.addEventListener("chatkit.response.end", function () {
+            if (WIDGET_BACKEND === "self") return;
             console.log("[ChatKit] response.end, threadId =", _debugThreadId);
             if (!_debugThreadId) return;
             fetch(
@@ -302,6 +345,23 @@ const WIDGET_CONFIG = {
               },
             },
           };
+          if (WIDGET_BACKEND === "self") {
+            kitOptions.api = {
+              url: WIDGET_CONFIG.chatkitEndpoint,
+              domainKey: WIDGET_CONFIG.domainKey,
+              // Язык страницы уходит на сервер: он выбирает агентов и базу знаний
+              fetch: function (input, init) {
+                init = init || {};
+                var headers = new Headers(init.headers || {});
+                headers.set("X-Retreat-Lang", WIDGET_LANG);
+                init.headers = headers;
+                init.credentials = "include";
+                return fetch(input, init);
+              },
+            };
+            kitOptions.startScreen = WIDGET_START;
+            kitOptions.composer = { attachments: { enabled: false } };
+          }
           var loc = WIDGET_CONFIG.locale;
           if (loc != null && String(loc).trim() !== "") {
             kitOptions.locale = String(loc).trim();
