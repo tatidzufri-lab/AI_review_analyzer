@@ -36,6 +36,9 @@ const REVIEWS_TEXT = {
   },
 }[REVIEWS_LANG];
 
+/** Имена, которыми воркер подписывает ответы (AI_AUTHOR_NAME в его .env). */
+const AI_AUTHOR_NAMES = ["AI-ассистент ретрита", "Retreat AI assistant", "AI Support"];
+
 const REVIEWS_CONFIG = {
   /** Базовый URL FastAPI-бэкенда. На проде — origin продакшна. */
   apiBase: "",
@@ -147,7 +150,9 @@ const REVIEWS_CONFIG = {
       }
 
       (replies || []).forEach(function (child) {
-        card.appendChild(buildReply(child.name || REVIEWS_CONFIG.aiAuthor, child.text));
+        // Воркер подписывает ответы одним именем из своего .env; на странице — подпись на языке страницы
+        var isAi = !child.name || AI_AUTHOR_NAMES.indexOf(child.name) !== -1;
+        card.appendChild(buildReply(isAi ? REVIEWS_CONFIG.aiAuthor : child.name, child.text));
       });
 
       return card;
