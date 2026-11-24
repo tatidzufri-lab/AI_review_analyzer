@@ -265,6 +265,18 @@ ul {
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.2);
 }
 
+/* Пометка демо под заголовком: сайт ретрита — учебный сценарий портфолио */
+.hero__demo-note {
+  display: inline-block;
+  margin: 0 0 var(--space-md, 1rem);
+  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

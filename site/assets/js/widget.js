@@ -13,6 +13,7 @@ const WIDGET_LANG = (document.documentElement.lang || "ru").slice(0, 2) === "en"
 const WIDGET_TEXT = {
   ru: {
     assistantName: "Консультант ретрита",
+    demoNote: "Демо · учебный сценарий",
     open: "Открыть чат",
     close: "Закрыть чат",
     loadFailed: "Не удалось загрузить ChatKit",
@@ -24,6 +25,7 @@ const WIDGET_TEXT = {
   },
   en: {
     assistantName: "Retreat assistant",
+    demoNote: "Demo · practice scenario",
     open: "Open chat",
     close: "Close chat",
     loadFailed: "Couldn't load ChatKit",
@@ -115,6 +117,8 @@ const WIDGET_CONFIG = {
       ".retreat-widget-panel{position:fixed;right:20px;bottom:88px;z-index:9999;width:360px;height:520px;max-height:calc(100vh - 120px);background:#fff;border-radius:14px;box-shadow:0 12px 40px rgba(44,26,14,0.08);display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(44,26,14,0.05);opacity:0;transform:translateY(16px);pointer-events:none;transition:opacity 0.35s ease,transform 0.35s ease,box-shadow 0.35s ease;}" +
       ".retreat-widget-panel.is-open{opacity:1;transform:translateY(0);pointer-events:auto;box-shadow:0 18px 48px rgba(44,26,14,0.12);}" +
       ".retreat-widget-header{display:flex;align-items:center;justify-content:space-between;padding:0.65rem 1rem;flex-shrink:0;background-color:#c4714f;border-bottom:1px solid rgba(44,26,14,0.12);}" +
+      ".retreat-widget-titlebox{display:flex;flex-direction:column;gap:2px;min-width:0;}" +
+      ".retreat-widget-demo-note{font-size:0.72rem;line-height:1.2;color:rgba(255,255,255,0.85);letter-spacing:0.03em;}" +
       ".retreat-widget-title{font-family:'Playfair Display',Georgia,serif;font-weight:600;font-size:1.05rem;line-height:1.25;margin:0;color:#fff;letter-spacing:0.02em;text-align:left;text-shadow:0 1px 0 rgba(44,26,14,0.15);}" +
       ".retreat-widget-close{background:transparent;border:none;color:rgba(255,255,255,0.92);font-size:1.2rem;line-height:1;cursor:pointer;padding:0.35rem 0.45rem;border-radius:8px;transition:color 0.2s ease,background-color 0.2s ease;}" +
       ".retreat-widget-close:hover{color:#fff;background-color:rgba(44,26,14,0.15);}" +
@@ -204,11 +208,14 @@ const WIDGET_CONFIG = {
     panel.setAttribute("aria-label", WIDGET_CONFIG.assistantName);
 
     var header = el("div", "retreat-widget-header");
+    var titleBox = el("div", "retreat-widget-titlebox");
     var title = el("h3", "retreat-widget-title", WIDGET_CONFIG.assistantName);
+    titleBox.appendChild(title);
+    titleBox.appendChild(el("span", "retreat-widget-demo-note", WIDGET_TEXT.demoNote));
     var closeBtn = el("button", "retreat-widget-close", "✕");
     closeBtn.type = "button";
     closeBtn.setAttribute("aria-label", WIDGET_TEXT.close);
-    header.appendChild(title);
+    header.appendChild(titleBox);
     header.appendChild(closeBtn);
 
     var status = el("div", "retreat-widget-status");
