@@ -1,81 +1,83 @@
-# AI-ассистент по отзывам ретрита «Познай себя»
+# AI review assistant for a website, with Telegram alerts
 
-Сервис сам отвечает на отзывы посетителей сайта и присылает владельцу уведомление о каждом новом отзыве в Telegram. Рабочая площадка: лендинг [retreat.tatidzufri.com](https://retreat.tatidzufri.com/#reviews).
+A service that replies to reviews left on a website by itself and sends the owner a Telegram alert about every new review. Live on the landing page [retreat.tatidzufri.com](https://retreat.tatidzufri.com/#reviews).
 
-![Секция отзывов с плитками статистики](demo/site-reviews-stats.png)
+This is a practice project. The retreat, "Know Yourself" («Познай себя»), is a training scenario of a retreat center, not a real organization. Reviews and replies work in Russian and English. Case study: [tatidzufri.com/en/case/ai-reviews-manager](https://tatidzufri.com/en/case/ai-reviews-manager).
 
-## О проекте
+![The reviews section with statistics tiles](demo/site-reviews-stats.png)
 
-Система состоит из двух частей. Сайт принимает отзывы через форму и показывает их вместе с ответами. Фоновый AI-ассистент каждые несколько секунд проверяет, не появилось ли нового, определяет настроение отзыва, пишет ответ от лица команды ретрита и оставляет его под отзывом. Параллельно владелец получает короткую сводку в Telegram.
+## About the project
 
-## Задача
+The system has two parts. The website takes reviews through a form and shows them together with the replies. A background AI assistant checks every few seconds for anything new, detects the review's sentiment, writes a reply on behalf of the retreat team and posts it under the review. At the same time the owner gets a short summary in Telegram.
 
-У ретрита есть лендинг, и обратную связь оставляют прямо на нем. Хотелось собирать отзывы на сайте без сторонних виджетов и регистраций, видеть каждое новое сообщение в Telegram, чтобы не пропустить недовольство, и отвечать теплым живым языком, не садясь каждый раз за текст.
+## The task
 
-Если делать это вручную, отзыв с претензией может провисеть без реакции несколько дней. Готовые сервисы либо платные, либо отвечают шаблонно и не попадают в тон проекта.
+The retreat has a landing page, and people leave feedback right there. The goal was to collect reviews on the site without third-party widgets or sign-ups, see every new message in Telegram so no complaint slips by, and reply in a warm, human voice without sitting down to write each time.
 
-## Решение
+Done by hand, a complaint can sit unanswered for days. Off-the-shelf services are either paid or reply with templates that don't match the project's tone.
 
-1. **Секция отзывов на сайте.** Форма подачи, карточки отзывов и четыре плитки статистики: всего, теплые, нейтральные, требуют внимания. Под отзывом сразу виден ответ ассистента.
-2. **Ассистент в фоне.** Сервис `worker_ai` опрашивает API сайта (по умолчанию раз в 10 секунд) и забирает отзывы со статусом `new`.
-3. **Настроение и ответ одним запросом.** Модель OpenAI определяет тон отзыва и пишет ответ на русском. Поэтому фраза «Долго сомневалась, но решилась, лучшее мое вложение в себя» распознается как теплая, хотя в ней есть слово «долго».
-4. **Запасной вариант.** Если ключа OpenAI нет или запрос упал, тон определяется по словам-маркерам, а ответ берется из заготовок. Сервис продолжает работать.
-5. **Уведомление в Telegram.** Имя автора, тон, дата и текст отзыва уходят владельцу в личный чат с ботом.
-6. **Защита от подделок.** Пометить отзыв обработанным и добавить ответ может только ассистент с токеном `X-Worker-Token`. Посетители могут только оставлять отзывы. На собственные ответы ассистент не реагирует, так что цепочки автоответов не возникает.
+## How it works
 
-## Как это выглядит
+1. **A reviews section on the site.** A submission form, review cards and four statistics tiles: total, warm, neutral, needs attention. The assistant's reply shows right under the review.
+2. **A background assistant.** The `worker_ai` service polls the site's API (every 10 seconds by default) and picks up reviews with the `new` status.
+3. **Sentiment and reply in one request.** An OpenAI model detects the review's tone and writes the reply in the review's language. So "I hesitated for a long time, but went for it, my best investment in myself" is read as warm, even though it starts with doubt.
+4. **A fallback.** If there's no OpenAI key or the request fails, tone is detected by marker words and the reply comes from prepared templates. The service keeps working.
+5. **A Telegram alert.** The author's name, tone, date and review text go to the owner's private chat with the bot.
+6. **Protection against fakes.** Only the assistant, holding the `X-Worker-Token`, can mark a review as processed and add a reply. Visitors can only leave reviews. The assistant ignores its own replies, so no auto-reply loops appear.
 
-**Ответы под тон отзыва.** На теплый отзыв ассистент искренне благодарит, на нейтральный отвечает коротко и спокойно, на отзыв с претензией мягко извиняется и предлагает разобраться. Без канцелярита и шаблонных подписей.
+## What it looks like
 
-![Отзывы с ответами AI-ассистента](demo/site-ai-replies.png)
+**Replies matched to the tone.** To a warm review the assistant thanks sincerely, to a neutral one it answers briefly and calmly, to a complaint it apologizes gently and offers to sort it out. No bureaucratic phrasing and no template signatures.
 
-**Уведомления в Telegram.** Каждый новый отзыв приходит владельцу с номером, именем автора, определенным тоном, датой и текстом. Если ассистент ошибся с тоном, можно зайти на сайт и поправить ответ руками.
+![Reviews with AI assistant replies](demo/site-ai-replies.png)
 
-![Уведомления о новых отзывах в Telegram](demo/telegram-new-review-notifications.png)
+**Telegram alerts.** Each new review reaches the owner with its number, author name, detected tone, date and text. If the assistant got the tone wrong, you can open the site and fix the reply by hand.
 
-## Результат
+![New review alerts in Telegram](demo/telegram-new-review-notifications.png)
 
-- Ответ под отзывом появляется через несколько секунд после отправки, без участия команды.
-- Ни один отзыв не теряется: даже если тон определен неверно, уведомление в Telegram дает шанс вмешаться.
-- Ответы укладываются в три предложения, без штампов и подписи. Стиль задан в инструкции для модели.
-- Плитки статистики показывают, сколько отзывов в каком настроении.
+## Results
 
-## Стек технологий
+- A reply appears under a review a few seconds after it's submitted, with no one from the team involved.
+- No review gets lost: even if the tone is detected wrong, the Telegram alert gives a chance to step in.
+- Replies stay within three sentences, with no clichés and no signature. The style is set in the model's instruction.
+- The statistics tiles show how many reviews fall into each sentiment.
 
-| Технология | Зачем используется |
+## Tech stack
+
+| Technology | What it's for |
 |---|---|
-| **Python** | Язык сервера сайта и AI-ассистента |
-| **FastAPI + Uvicorn** | Сервер сайта: прием отзывов из формы, выдача списка на страницу, обновление статусов от ассистента |
-| **SQLite + SQLAlchemy** | Хранение отзывов и ответов в одном файле. Через SQLAlchemy базу можно сменить на PostgreSQL без переписывания кода |
-| **OpenAI API** | Определяет настроение и пишет ответ за один запрос. Модель задается в `.env`, в примере `gpt-4.1-mini` |
-| **httpx** | Запросы ассистента к API сайта |
-| **Telegram Bot API** | Уведомления владельцу о новых отзывах |
-| **HTML, CSS, JavaScript** | Секция отзывов без фреймворков, чтобы она легко вставлялась в готовый лендинг |
-| **Docker** | Отдельный контейнер для ассистента |
+| **Python** | Language of the site server and the AI assistant |
+| **FastAPI + Uvicorn** | The site server: takes reviews from the form, serves the list to the page, updates statuses from the assistant |
+| **SQLite + SQLAlchemy** | Reviews and replies in a single file. With SQLAlchemy the database can be switched to PostgreSQL without rewriting code |
+| **OpenAI API** | Detects sentiment and writes the reply in one request. The model is set in `.env`, `gpt-4.1-mini` in the example |
+| **httpx** | The assistant's requests to the site's API |
+| **Telegram Bot API** | Alerts the owner about new reviews |
+| **HTML, CSS, JavaScript** | A reviews section with no framework, so it drops into an existing landing page |
+| **Docker** | A separate container for the assistant |
 
-## Структура репозитория
+## Repository structure
 
-- `site/`: лендинг ретрита и его сервер, включая секцию отзывов (`site/server/reviews.py`, `site/assets/js/reviews.js`).
-- `worker_ai/`: фоновый AI-ассистент. Как его настроить, описано в `worker_ai/README.md`.
-- `update_site.py`: управляющий скрипт для локальной разработки, проверок, сборки встраиваемого блока отзывов и выкладки на сервер.
-- `demo/`: скриншоты с сайта и из Telegram.
+- `site/`: the retreat landing page and its server, including the reviews section (`site/server/reviews.py`, `site/assets/js/reviews.js`).
+- `worker_ai/`: the background AI assistant. Setup is described in `worker_ai/README.md`.
+- `update_site.py`: a control script for local development, checks, building the embeddable reviews block and deploying to the server.
+- `demo/`: screenshots from the site and Telegram.
 
-## Запуск
+## Running it
 
-Нужен Python 3 (в контейнерах используется 3.12). Все команды идут через `update_site.py`:
+You need Python 3 (the containers use 3.12). Everything goes through `update_site.py`:
 
 ```bash
-python update_site.py init          # окружение, зависимости, база, демо-отзывы
-python update_site.py serve         # сервер сайта на http://127.0.0.1:8000
-python update_site.py static        # лендинг на http://127.0.0.1:8080
-python update_site.py worker        # AI-ассистент
-python update_site.py smoke-test    # проверка API, которым пользуется ассистент
+python update_site.py init          # environment, dependencies, database, demo reviews
+python update_site.py serve         # site server on http://127.0.0.1:8000
+python update_site.py static        # landing page on http://127.0.0.1:8080
+python update_site.py worker        # the AI assistant
+python update_site.py smoke-test    # checks the API the assistant uses
 ```
 
-Перед запуском заполните `site/server/.env` и `worker_ai/.env` по примерам `.env.example`. Значение `WORKER_API_TOKEN` в обоих файлах должно совпадать, иначе сайт не даст ассистенту обновлять отзывы. Без `OPENAI_API_KEY` ассистент работает на запасных ответах, без настроек Telegram просто не шлет уведомления.
+Before starting, fill in `site/server/.env` and `worker_ai/.env` from the `.env.example` files. `WORKER_API_TOKEN` must match in both, otherwise the site won't let the assistant update reviews. Without `OPENAI_API_KEY` the assistant runs on the fallback replies; without Telegram settings it just doesn't send alerts.
 
-Еще команды скрипта: `snippet` собирает автономный блок отзывов для вставки в другой сайт, `reset-review` возвращает отзывы в статус `new`, `deploy` выкладывает `site/` на сервер через rsync и ssh.
+Other commands: `snippet` builds a standalone reviews block to embed in another site, `reset-review` returns reviews to the `new` status, `deploy` uploads `site/` to the server with rsync and ssh.
 
-## Автор
+## Author
 
-Татьяна Дзюбас, AI-инженер по автоматизации. Делаю Telegram-ботов, RAG-ассистентов и LLM-агентов, которые снимают рутину с небольших команд. Кейсы и контакты на [tatidzufri.com](https://tatidzufri.com).
+Tetiana Dziubas, AI automation engineer. I build Telegram bots, RAG assistants and LLM agents that take routine work off small teams. Case studies and contact: [tatidzufri.com/en](https://tatidzufri.com/en/).
